@@ -1,0 +1,15 @@
+Badrcon.py
+# Description
+    Badrcon reads the console.log of q3 engines and looks for
+    bad rcon packets and attempts to block the offending ip
+    at the Operating system level, written for winnt and 
+    linux, command lines are flexible but IMPORTANT, I've
+    included two example files which will work with WinServer2003
+    and Ubuntu Linux, DO NOT change these unless you know 
+    EXACTLY what you are doing, 
+
+# Installation
+copy file and xml to /extplugins
+
+# Versioning
+    This is first commit, version .5a, pre-release
