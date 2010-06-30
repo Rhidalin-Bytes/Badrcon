@@ -74,9 +74,14 @@
 # tp = "Bad Rcon"
 # IPP = 4
 # grace = 5
-# bancommand = 
-# unbancommand = 
-# listbancommand = 
+# bancommand = netsh ipsec dynamic add rule srcaddr=192.168.100.100 mmpolicy=1
+# qmpolicy=qmsec dstaddr=ANY mirrored=yes srcport=0 dstport=0 actioninbound=block actionoutbound=block
+# unbancommand = netsh ipsec dynamic delete rule srcaddr=192.168.100.100 dstaddr=ANY mirror=yes srcport=0 
+# dstport=0 proto=any conntype=all
+# listbancommand = netsh ipsec dynamic show qmfilter Name = "87.0.0.0 - More Ripe crap"
+# Must make sure that mmpolicy and qmpolicy is created or exists, also, must verify addition and removal, list
+# bancommand is for all, perhaps change it to querybancommand, where srcaddr=%s and pass ALL for !ipbanlist
+
 
 # write in set run once for sql table creation for new plugin users, eg. if not table use built sql
 
