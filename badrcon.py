@@ -27,48 +27,8 @@
 #               return false
 #           else 
 #               return true
-
-#Rcon from 192.168.1.100:-2899:
-#status
-#Rcon from 192.168.1.100:-2899:
-#say
-#Rcon from 192.168.1.100:-2899:
-#status
-#Sending heartbeat to cod2master.activision.com
-#WARNING: Non-localized Game Message string is not allowed to have letters in it. Must be changed over to a localized string: "Welcome to another fine server running ^1WRM^7 - Wolfsbane's Realism Mod"
-#Rcon from 192.168.1.100:-2899:
-#status
-#Rcon from 192.168.1.100:-2899:
-#say
-#WARNING: Non-localized Game Message string is not allowed to have letters in it. Must be changed over to a localized string: "For all your WRM inquiries, visit their forums at ^3www.1stsfss.org^7"
-#Rcon from 192.168.1.100:-2899:
-#status
-#Rcon from 192.168.1.100:-2899:
-#status
-#Rcon from 192.168.1.100:-2899:
-#say
-#Bad rcon from 192.168.1.100:-16349:
-#status
-#Bad rcon from 192.168.1.100:-16348:
-#status
 #Bad rcon from 192.168.1.100:-16347:
 #status
-#
-# ipsecpol –w REG –p "Packet Filter" –r "Inbound/outbound mail"
-# -f *+131.107.1.1:110:TCP –f *+131.107.1.1:995:TCP
-# -f *+131.107.1.1:143:TCP –f *+131.107.1.1:993:TCP
-# -f *+131.107.1.1:25:TCP –f 131.107.1.1+*:25:TCP
-# –n PASS
-# Command for listed bad rcon would be 
-# ipsecpol -w REG -p "Bad Rcon Traffic" -f 192.168.1.100:*:*+* -n BLOCK -x
-# 
-# problem with command line to research, how do we list and unban, removal isn't explicitly 
-# stated for ipsecpol
-# Possible solution is to use a table in sql for storage of IP's and their status. This would allow
-# a page to be created for echelon to deal with checking on ban status. Haven't worked out how
-# echelon would unban an ip. Possibly use the on map change event to trigger a "bancheck" of the 
-# sql table.
-
 # DECLARED VARIABLES
 # log = Z:\mp_console.log
 # tp = "Bad Rcon"
@@ -81,14 +41,11 @@
 # listbancommand = netsh ipsec dynamic show qmfilter Name = "87.0.0.0 - More Ripe crap"
 # Must make sure that mmpolicy and qmpolicy is created or exists, also, must verify addition and removal, list
 # bancommand is for all, perhaps change it to querybancommand, where srcaddr=%s and pass ALL for !ipbanlist
+# write in set run once for sql table creation for new plugin users, eg. if not table use build sql add to init
 
+import b3, b3.plugin, re, time, re, fileinput
 
-# write in set run once for sql table creation for new plugin users, eg. if not table use built sql
-
-import b3, b3.admin, re, time, re, fileinput
-# Possible log parse
-
-class Parser(object):
+class BadrconPlugin(b3.plugin.Plugin):
     _lineFormat = re.compile('^([a-z ]+): (.*?)', re.IGNORECASE)
 
     _events = {}
@@ -101,15 +58,15 @@ class Parser(object):
     _cron = None
 
     info = None
-    
-    _SELECT_QUERY = "SELECT ip, cnt, ban, modified FROM badrcon WHERE ip = %s"
-    _ADD_QUERY = "INSERT INTO badrcon (ip, cnt, ban, modified_date) VALUES ('%s','%s',%s, NOW())"
+    config = None
+    # table = badrcon index, ip, cnt, ban, modified_date, client
+    _SELECT_QUERY = "SELECT ip, cnt, ban, client, modified_date FROM badrcon WHERE ip = %s"
+    _ADD_QUERY = "INSERT INTO badrcon (ip, cnt, ban, client, modified_date) VALUES ('%s','%s',%s,'%s',NOW())"
     _CNT_QUERY = "UPDATE badrcon SET cnt=cnt+1 WHERE ip='%s'"
     _BAN_QUERY = "UPDATE badrcon SET ban='%s' WHERE ip='%s'" 
-    _LIST_QUERY = "SELECT ip FROM following WHERE ban=true"
+    _LIST_QUERY = "SELECT ip FROM badrcon WHERE ban=true"
     
-    def __init__(self, config):
-        self._timeStart = self.time()
+    def startup(self):
 
         if not self.loadConfig(config):
             print 'COULD NOT LOAD CONFIG'
@@ -128,8 +85,10 @@ class Parser(object):
             self.error('Error reading file %s', f)
             raise SystemExit('Error reading file %s\n' % f)
             
-        # Do we have access to the SQL table
-
+        # Start it up
+    def run(self):
+        self.parseit()
+        
     def loadConfig(self, config):
         """Set the config file to load"""
 
@@ -139,31 +98,28 @@ class Parser(object):
         self.config = config
 
         return True
-    def parseit:
+    def parseit(self):
         IPC = ":"
         for line in fileinput.input(log):
-            if linetest(line, tp)
-                ip, IPC, tail = line[IPP].split(IPC)
-                # Insert IP into sql and check it's counter for grace
-                stickip(ip, 1)
-                self.debug('messing with ip %s', ip
-                # Cross reference IP to Clients
-                # If either return true then call osipban(IP)
- 
-
-    def closefile:
+            ip, IPC, tail = line[IPP].split(IPC)
+            # Insert IP into sql and check it's counter for grace
+            if stickip(ip, 1):
+                self.debug('parsed and dealt with ip %s', ip)
+            else:
+                self.debug('unable to deal with ip %s', ip)
+            # Add possible cross reference IP to Client
+            
+    def closefile(self):
         self.exit
            
     def linetest(line, tp):
         cnt = 0
-        while cnt =< len(tp):
-            if test(cnt) == tp(cnt)
-                b = true
-            else
-                b = false
-            boo = boo + b
-            cnt += 1
-        return boo
+        if cnt <= len(tp):
+            if test(cnt) == tp(cnt):
+                return true
+            else:
+                return false
+        return false
 
     def osipban(self, ip, count, client=None):
         if ip:
@@ -176,8 +132,13 @@ class Parser(object):
     
     def osipunban(self, ip, client=None):
         if ip:
+            stdout_handle = os.popen(self.bancommand, "r")
+            text = stdout_handle.read()
+            for lines in text:
+                self.debug('%s', line)
+            return true
+                #os.system('%s', self.unbancommand)
             admin.say('%s has been unbanned', ip)
-            os.system('%s', self.unbancommand)
             return true
         else:
             self.client('You must supply a valid IP')
@@ -186,26 +147,35 @@ class Parser(object):
     def osipbanlist(self, client=None):
         stdout_handle = os.popen(self.banlistcommand, "r")
         text = stdout_handle.read()
-        for lines in text
-        self.client('%s', line)
+        for lines in text:
+            self.client('%s', line)
             return true
             
-    def stickip(self, ip, cnt)
+    def stickip(self, ip, client=None):
         """\
         <ip> - add ip to perm ban list
         """
         goat = self.console.storage.query(self._SELECT_QUERY % ip)
         if goat.rowcount == 0:
-            cursor2 = self.console.storage.query(self._ADD_QUERY % (sclient.id, client.id, self.console.time()))
+            cursor2 = self.console.storage.query(self._ADD_QUERY % (ip, cnt, ban, client))
             cursor2.close()
             self.debug("ip added to sql")
         else:
-            self.debug("ip exists, count added")
-            cursor2 = self.console.storage.query(self._CNT_QUERY % (ip))
-            cursor2.close()
+            if goat[1] >= (grace - 1):
+                if osipban(ip):
+                    return true
+                else:
+                    self.debug("OS ip ban for %s failed",ip)
+                    return false
+                #nothing more to do here, problem dealt with
+            else:            
+                cursor2 = self.console.storage.query(self._CNT_QUERY % (ip))
+                self.debug("ip %s exists, count added", ip)
+                cursor2.close()
+                return true
         cursor.close()
 
-    def unstickip(self, ip, client);
+    def unstickip(self, ip, client):
         """\
         <ip> - remove ip from ban list
         """        
@@ -218,12 +188,12 @@ class Parser(object):
         cursor = self.console.storage.query(self._BAN_QUERY % 0, ip)
         cursor.close()
         self.debug("IP removed from database")
-        if osipunban(ip)
+        if osipunban(ip):
             client.message("^7%s ip ban removed.", ip)
-        else
+        else:
             client.message("There was a problem, contact tech support")
         
-    def listips(self, ip, client);
+    def listips(self, ip, client):
 
         """\
         list ip addresses in ban state
