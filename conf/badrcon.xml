@@ -22,9 +22,10 @@
     <!-- These commands are used to send commands to the operating system
          Default is set for Windows Server 2003 using netsh method,
          These can be set for Linux to add to host deny, iptables 
-         or create a file for fail2ban (seems pointless huh?). -->
-		<set name="bancommand">@echo %s is banned</set>
-		<set name="unbancommand">@echo %s is unbanned</set>
-		<set name="listbancommand">@echo I am listing bans</set>
+         or create a file for fail2ban (seems pointless huh?). 
+         XXX = location to insert IP -->
+		<set name="bancommand">netsh ipsec static add filter filterlist="BannedIPS" srcaddr=XXX dstaddr=me description=XXX protocol=any srcport=0 dstport=0</set>
+		<set name="unbancommand">netsh ipsec static delete filter filterlist="BannedIPS" srcaddr=XXX</set>
+		<set name="listbancommand">netsh ipsec static show filterlist name="BannedIPS" level=verbose</set>
     </settings>
 </configuration>
