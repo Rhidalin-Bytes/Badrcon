@@ -98,7 +98,7 @@ class BadrconPlugin(b3.plugin.Plugin):
         # Don't forget the white lists
         tpre = re.escape(self.tp)
         s1 = re.compile(r"(%s)." % tpre)
-        s2 = re.compile(r"\b(\d{1,3}\.){3}\d{1,3}\b")
+        s2 = re.compile((r"(%s)") % ("\.".join(['(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)']*4)))
         i = 0
         results = []
         while 1:
@@ -110,7 +110,7 @@ class BadrconPlugin(b3.plugin.Plugin):
                     m = s1.match(line)
                     if m:
                         mip = s2.search(line)
-                        cmd_stickip(data = mip)
+                        self.cmd_stickip(data = mip.group(1))
                         break
                     else:
                         break
@@ -131,12 +131,12 @@ class BadrconPlugin(b3.plugin.Plugin):
                 ip = ''
                 for n in m:
                     ip = ip + n
-                self.debug('ip is %s' % ip)
                 cnt = self.grace + 1
             else:        
                 self.client('You must supply a valid IP')
                 return False
-
+        else:
+            ip = data
         # Whether it's command or automation, we need to make sure IP exists
         goat = self.console.storage.query(self._SELECT_QUERY % ip)
         if goat.rowcount == 0:
@@ -148,9 +148,7 @@ class BadrconPlugin(b3.plugin.Plugin):
         goat.close()
         goat = self.console.storage.query(self._SELECT_QUERY % ip)
         # ip, cnt, ban, client, immune
-        recheck  = goat.getRow()
-        self.debug(recheck['cnt'])
-        self.debug(self.grace)
+        recheck = goat.getRow()
         goat.close()
         if recheck['cnt'] >= self.grace and not recheck['immune']:
             ban = 1
@@ -163,7 +161,6 @@ class BadrconPlugin(b3.plugin.Plugin):
                 # stick IP into bancommand
                 o = sys.platform
                 bancommand = self.bancommand.replace('XXX', ip)
-                self.debug(bancommand)
                 p = subprocess.Popen(bancommand, stdout=subprocess.PIPE, close_fds=False, stderr=subprocess.PIPE, shell=(o), stdin=subprocess.PIPE)
                 text = p.stdout
                 for line in text:
@@ -172,14 +169,20 @@ class BadrconPlugin(b3.plugin.Plugin):
                         p.close()
                         raise
                 p.close()
-                client.message('%s has been banned for %s Bad Rcon tries'% ip, goat[1])
+                if client:
+                    client.message('%s has been banned for %s Bad Rcon tries'% ip, goat[1])
+                else:
+                    cmd.sayLoudOrPM(None, '%s has been banned for %s Bad Rcon tries' % ip, goat[1])
             except:
-                client.message('OS Error: %s is not bannned' % ip)
+                try:
+                    client.message('OS Error: %s is not bannned' % ip)
+                except:
+                    self.debug('OS Error: %s is not banned' % ip)
                 return False
             return True
         # if it's immune and someone told me to do it, tell them we can't
         elif recheck['immune'] and client:
-            admin.say('The ip you entered is protected, see a server admin')
+            client.message('The ip you entered is protected, see a server admin')
             goat.close()
             return False
         # if someone protected is making a mistake, forgive them.
@@ -192,7 +195,7 @@ class BadrconPlugin(b3.plugin.Plugin):
             self.debug("ip %s hacking, count added" % ip)
             cursor2.close()
             self.console.say('B3 bot is watching!')
-            return true
+            return True
  
     def cmd_unstickip(self, data, client=None, cmd=None):
         """\
@@ -200,37 +203,43 @@ class BadrconPlugin(b3.plugin.Plugin):
         """        
         m = self._adminPlugin.parseUserCmd(data)
         if m:
+            ip = ''
             for n in m:
                 ip = ip + n
-            self.debug('ip is %s' % ip)
             cnt = self.grace + 1
         else:        
             self.client('You must supply a valid IP')
             return False
         # Lets see if it exists and is banned
-        goat = self.console.storage.query(self._BAN_LISTQUERY % ip)
-        if goat.rowcount() == 0:
+        goat = self.console.storage.query(self._SELECT_QUERY % ip)
+        if goat.rowcount == 0:
             client.message("%s does not exist in the database, please contact admins" % ip)
         else:
             try:
-                cursor2 = self.console.storage.query(self._BAN_QUERY % 0, ip)
+                cursor2 = self.console.storage.query(self._BAN_QUERY % (0, ip))
                 cursor2.close()
                 self.debug("%s ban lifted from database" % ip)
                 o = sys.platform
                 unbancommand = self.unbancommand.replace('XXX', ip)
                 p = subprocess.Popen(unbancommand, stdout=subprocess.PIPE, close_fds=False, stderr=subprocess.PIPE, shell=(o), stdin=subprocess.PIPE)
-                text = p.stdout
+                text = p.stdout, p.stderr
                 for line in text:
                     self.debug('line is %s' % line)
                     if 'ERR' in line:
-                        raise OSerror
-                admin.say('%s unbanned' % ip)
-                return true
-            except OSerror:
-                client.message('%s not removed, contact tech support(OS)' % ip)
+                        raise OSError
+                client.message('%s unbanned' % ip)
+                return True
+            except OSError:
+                if client:
+                    client.message('%s not removed, contact tech support(OS)' % ip)
+                else:
+                    self.debug('%s not removed, contact tech support(OS)' % ip)
                 return false
             except:
-                client.message('%s not removed, contact tech support(DBOS)' % ip)
+                if client:
+                    client.message('%s not removed, contact tech support(DBOS)' % ip)
+                else:
+                    self.debug('%s not removed, contact tech support(DBOS)' % ip)
                 
     def cmd_listips(self, data, client=None, cmd=None):
         """\
@@ -241,12 +250,15 @@ class BadrconPlugin(b3.plugin.Plugin):
             client.message("^7The list is empty.")
             cursor.close()
             return False
-
+        ips = []
         while not cursor.EOF:
             r = cursor.getRow()
-            client.message('%s banned %s', ip, modified_date)
+            self.debug('r is %s' % r)
+            ips.append(r['ip'])
             cursor.moveNext()
         cursor.close()
+        client.message('These IP addresses are banned')
+        client.message(', '.join(ips))
         
     def cmd_ipsafe(self, data, client=None, cmd=None):
         """\
@@ -266,12 +278,10 @@ class BadrconPlugin(b3.plugin.Plugin):
             return False
         goat = self.console.storage.query(self._SELECT_QUERY % ip)
         if goat.rowcount == 0:
-            self.debug('rowcount 0')
             cursor2 = self.console.storage.query(self._ADD_QUERY % (ip, cnt, ban, client.id, immune))
             cursor2.close()
             client.message('%s is now immune' % ip)
         elif goat.rowcount > 0:
-            self.debug('rowcount 1')
             cursor2 = self.console.storage.query(self._IMMUNE_QUERY % (immune, ip))
             cursor2.close()
             client.message('%s is now immune' % ip)
@@ -291,18 +301,14 @@ class BadrconPlugin(b3.plugin.Plugin):
         m = self._adminPlugin.parseUserCmd(data)
         for n in m:
             ip = ip + n
-        self.debug('ip is %s' % ip)        
         goat = self.console.storage.query(self._SELECT_QUERY % ip)
         try:
             if goat.rowcount == 0:
                 goat.close()
-                self.debug('rowcount = 0')
                 cursor2 = self.console.storage.query(self._ADD_QUERY % (ip, cnt, ban, client, immune))
                 cursor2.close()
-
             else:
                 goat.close()
-                self.debug('rowcount = 1')
                 cursor2 = self.console.storage.query(self._IMMUNE_QUERY % (immune, ip))
                 cursor2.close()
             client.message('%s is no longer immune' % ip)
@@ -325,4 +331,10 @@ class BadrconPlugin(b3.plugin.Plugin):
         goat.close()
         client.message('These IP addresses are immune')
         client.message(', '.join(ips))
+        
+class OSError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
         
